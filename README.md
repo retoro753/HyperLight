@@ -3,14 +3,15 @@
 **Xiaomi-Bloatware und Google per ADB entfernen – ohne Root, ohne Bootloader-Entsperrung.**
 *Remove Xiaomi bloatware and Google via ADB – no root, no bootloader unlock.* ([English below](#english))
 
-**HyperLight** besteht aus zwei kleinen, gut kommentierten Bash-Skripten. Das Handy behält seine **offiziellen Sicherheitsupdates**, und jede Änderung lässt sich **rückgängig machen**.
+**HyperLight** besteht aus drei kleinen, gut kommentierten Bash-Skripten. Das Handy behält seine **offiziellen Sicherheitsupdates**, und jede Änderung lässt sich **rückgängig machen**.
 
 | Skript | Wofür |
 |---|---|
 | 💡 [`hyperlight.sh`](#-hyperlightsh--xiaomi-bloatware-entfernen) | Entfernt Xiaomi-Werbung, Tracking-Dienste und vorinstallierte Apps |
 | 🚫 [`hyperlight-degoogle.sh`](#-hyperlight-degooglesh--google-entfernen) | Entfernt Google-Apps und optional die Google-Dienste (zwei Stufen) |
+| 🎮 [`hyperlight-check.sh`](#-hyperlight-checksh--abschlusstest-mit-highscore) | Abschlusstest: Wie frei ist das Handy von Xiaomi und Google? Mit Highscore (nur lesend) |
 
-Beide Skripte sind unabhängig voneinander nutzbar. Empfohlene Reihenfolge: erst `hyperlight.sh`, dann bei Bedarf `hyperlight-degoogle.sh`.
+Empfohlene Reihenfolge: erst `hyperlight.sh`, dann bei Bedarf `hyperlight-degoogle.sh`, zum Schluss `hyperlight-check.sh`.
 
 > [!WARNING]
 > **Nutzung auf eigene Gefahr.** Die Skripte wurden nur auf dem unten genannten Gerät getestet. Sie brechen absichtlich ab, wenn ein anderes Gerät angeschlossen ist.
@@ -91,6 +92,54 @@ Einige Google-Pakete **sind** Android selbst und werden nie angefasst: WebView, 
 
 ---
 
+## 🎮 hyperlight-check.sh – Abschlusstest mit Highscore
+
+Ein **Audit**, das prüft, wie weit dein Handy von Xiaomi und Google befreit ist. Es **liest nur** und verändert nichts am Handy.
+
+> [!NOTE]
+> `hyperlight-check.sh` muss **im selben Ordner** liegen wie `hyperlight.sh` und `hyperlight-degoogle.sh`. Es liest deren Paketlisten direkt aus, ohne sie auszuführen. So passen die Prüfungen immer zu den aktuellen Listen.
+
+**Was geprüft wird:**
+
+| # | Bereich | Prüfung |
+|---|---|---|
+| 1 | Xiaomi-Bloatware | Welche bekannten Pakete sind noch installiert? |
+| 2 | Google-Apps | Stand von Degoogle Stufe 1 |
+| 3 | Google-Kern | Play-Dienste, Play Store, GSF, Google-Backup |
+| 4 | Unbekannte Reste | Xiaomi-/Google-Pakete, die auf keiner Liste stehen |
+| 5 | Konten | Anzahl angemeldeter Google- und Xiaomi-Konten (keine Namen/E-Mails) |
+| 6 | Standard-Apps | Telefon, SMS, Browser, Assistent, Tastatur: noch Google/Xiaomi? |
+| 7 | Prozesse | Wie viele Google-/Xiaomi-Prozesse laufen gerade? |
+| 8 | Sicherheit | Alter des Sicherheitspatches, Bootloader gesperrt?, Privates DNS, USB-Debugging |
+
+**Highscore (max. 100 Punkte):**
+
+```
+╔══════════════════════════════════════════╗
+║            ★  HIGHSCORE   ★              ║
+╚══════════════════════════════════════════╝
+   ███████████████░░░░░  77 / 100
+   Rang: A – Fast frei
+```
+
+| Bereich | Punkte |
+|---|---|
+| Xiaomi-Liste entfernt | 30 |
+| Google-Apps entfernt | 25 |
+| Google-Kern entfernt | 15 |
+| Kein Google-/Xiaomi-Konto | 10 |
+| Standard-Apps ohne Google/Xiaomi | 10 |
+| Privates DNS aktiv | 5 |
+| Keine unbekannten Reste | 5 |
+
+**Ränge:** S ≥ 90 (komplett befreit 🏆) · A ≥ 75 · B ≥ 60 · C ≥ 40 · D
+
+Wer Google-Kern oder -Konto **bewusst behält**, kann kein S erreichen. Das ist kein Fehler, der Score zeigt nur, wie weit man gegangen ist.
+
+Der Bericht wird zusätzlich als `~/hyperlight-logs/check-bericht-DATUM.md` gespeichert.
+
+---
+
 ## 📋 Voraussetzungen
 
 - Ein Rechner mit **Linux** oder **macOS**
@@ -132,7 +181,7 @@ Erwartete Ausgabe: `XXXXXXXX    device`
 ```bash
 git clone https://github.com/retoro753/HyperLight.git
 cd HyperLight
-chmod +x hyperlight.sh hyperlight-degoogle.sh
+chmod +x hyperlight.sh hyperlight-degoogle.sh hyperlight-check.sh
 ```
 
 > [!TIP]
@@ -157,11 +206,17 @@ Beim Start Sprache wählen (1 = Deutsch, 2 = English), dann mit `ja` bestätigen
 ./hyperlight-degoogle.sh --core              # Stufe 2: Google komplett
 ```
 
+### 7. Abschlusstest
+```bash
+./hyperlight-check.sh
+```
+Zeigt, was noch übrig ist, und vergibt einen Highscore. Danach **USB-Debugging wieder ausschalten**.
+
 ---
 
 ## 🧰 Alle Optionen
 
-Beide Skripte verstehen dieselben Optionen (`hyperlight-degoogle.sh` zusätzlich `--core`):
+`hyperlight.sh` und `hyperlight-degoogle.sh` verstehen dieselben Optionen (`hyperlight-degoogle.sh` zusätzlich `--core`). `hyperlight-check.sh` kennt nur `--lang de|en` und `--help`.
 
 | Befehl | Was passiert |
 |---|---|
@@ -237,9 +292,10 @@ Mit Stufe 1 ja, fast ohne Einschränkungen. Stufe 2 ist eher für Test- und Zwei
 <a name="english"></a>
 ## 🇬🇧 English
 
-Two small, well-commented Bash scripts that work via **ADB**, **without root** and **without unlocking the bootloader**. The phone keeps its official security updates, and every change can be undone.
+Three small, well-commented Bash scripts that work via **ADB**, **without root** and **without unlocking the bootloader**. The phone keeps its official security updates, and every change can be undone.
 
 - 💡 **`hyperlight.sh`** removes Xiaomi ads, tracking services and preinstalled apps.
+- 🎮 **`hyperlight-check.sh`** is a read-only audit: it checks leftovers, accounts, default apps, running processes, security patch, bootloader and Private DNS, and gives you a high score (rank S–D). Must be in the same folder as the other two scripts.
 - 🚫 **`hyperlight-degoogle.sh`** removes Google apps (stage 1) and optionally Play services, Play Store and GSF (stage 2, `--core`). Phone, SMS, contacts, keyboard and Chrome are only removed if a replacement is already set as default. Stage 2 is blocked while a Google account is signed in (factory reset protection) and requires typing `DEGOOGLE`.
 
 **Tested on:** Redmi Note 13 4G NFC (23124RA7EO, codename `sapphiren`), Xiaomi HyperOS 2.0.215.0, Android 15, EU ROM. The scripts refuse to run on other devices.
@@ -249,12 +305,13 @@ Two small, well-commented Bash scripts that work via **ADB**, **without root** a
 ```bash
 git clone https://github.com/retoro753/HyperLight.git
 cd HyperLight
-chmod +x hyperlight.sh hyperlight-degoogle.sh
+chmod +x hyperlight.sh hyperlight-degoogle.sh hyperlight-check.sh
 ./hyperlight.sh --dry-run                    # preview, changes nothing
 ./hyperlight.sh --lang en                    # run in English (confirm with "yes")
 ./hyperlight.sh --restore                    # undo last run
 ./hyperlight-degoogle.sh --lang en           # stage 1: Google apps
 ./hyperlight-degoogle.sh --core --lang en    # stage 2: Google services too
+./hyperlight-check.sh --lang en              # final audit with high score
 ```
 
 **Features:** protected-package list (critical system apps are never touched), device check, dry run, confirmation prompt, final report (terminal + Markdown), `--scan` for unknown packages, restore options.

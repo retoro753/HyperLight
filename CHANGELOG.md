@@ -1,5 +1,16 @@
 # Changelog
 
+## Check [1.0] – 2026-11-26
+### Erste Version von `hyperlight-check.sh`
+- Nur-Lese-Audit: Xiaomi-Reste, Google-Apps, Google-Kern, unbekannte Pakete
+- Angemeldete Konten (nur Anzahl), Standard-Apps, laufende Prozesse
+- Sicherheit: Patch-Alter, Bootloader-Status, Privates DNS, USB-Debugging
+- Highscore (0–100) mit Rang S–D und Fortschrittsbalken
+- Liest die Paketlisten direkt aus `hyperlight.sh` und `hyperlight-degoogle.sh`
+- Zweisprachig, Bericht als Markdown
+
+---
+
 ## Degoogle [1.1] – 2026-11-26
 ### Neu
 - Google News (`com.google.android.apps.magazines`) und Google Home (`com.google.android.apps.chromecast.app`) in Stufe 1
