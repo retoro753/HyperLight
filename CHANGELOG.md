@@ -1,5 +1,24 @@
 # Changelog
 
+## Degoogle [1.1] – 2026-11-26
+### Neu
+- Google News (`com.google.android.apps.magazines`) und Google Home (`com.google.android.apps.chromecast.app`) in Stufe 1
+
+## Degoogle [1.0] – 2026-11-26
+### Erste Version von `hyperlight-degoogle.sh`
+- Stufe 1: Google-Apps entfernen
+- Stufe 2 (`--core`): Play-Dienste, Play Store, Google Services Framework, Google-Backup
+- Ersatz-Prüfung für Telefon, Kontakte, Messages, Tastatur und Browser (über Android-Rollen bzw. Standard-Tastatur)
+- Sperre für Stufe 2, solange ein Google-Konto angemeldet ist (Diebstahlschutz/FRP)
+- Extra-Bestätigung mit `DEGOOGLE` für Stufe 2
+- Schutzliste für Google-Systemkomponenten (WebView, Berechtigungen, Netzwerk, Mainline-Module …)
+- Eigene Wiederherstellungs-Logs, Play-Dienste werden zuerst zurückgeholt
+- Zweisprachig, Endbericht mit ⚠️ für fehlenden Ersatz
+
+---
+
+# hyperlight.sh
+
 ## [2.1] – 2026-11-26
 ### Neu
 - Projekt heißt jetzt **HyperLight** (`hyperlight.sh`)
