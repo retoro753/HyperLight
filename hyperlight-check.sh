@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  HyperLight Check – hyperlight-check.sh  –  Version 1.0
+#  HyperLight Check – hyperlight-check.sh  –  Version 1.1
 #  https://github.com/retoro753/HyperLight
 #
 #  Prüft, wie weit das Handy von Xiaomi und Google befreit ist (Audit).
@@ -18,7 +18,7 @@
 #  Lizenz / License: MIT
 # =============================================================================
 
-VERSION="1.0"
+VERSION="1.1"
 set -u
 
 ORDNER="$(cd "$(dirname "$0")" && pwd)"
@@ -69,6 +69,8 @@ DE[s_sicherheit]="8) SICHERHEIT & DATENSCHUTZ"
 EN[s_sicherheit]="8) SECURITY & PRIVACY"
 DE[entfernt_von]="%s von %s bekannten Paketen sind weg"
 EN[entfernt_von]="%s of %s known packages are gone"
+DE[davon_deakt]="davon %s deaktiviert (💤), weil Xiaomi das Entfernen blockiert"
+EN[davon_deakt]="%s of them disabled (💤) because Xiaomi blocks removal"
 DE[noch_da]="noch installiert:"
 EN[noch_da]="still installed:"
 DE[alles_weg]="Alles entfernt."
@@ -250,7 +252,11 @@ mapfile -t G_SCHUTZ   < <(lies_liste "$DEGOOGLE_SKRIPT" GESCHUETZT)
 mapfile -t G_PRAEFIX  < <(lies_liste "$DEGOOGLE_SKRIPT" GESCHUETZT_PRAEFIX)
 mapfile -t X_PRAEFIX  < <(lies_liste "$DEBLOAT_SKRIPT"  GESCHUETZT_PRAEFIX)
 
-INSTALLIERT=$(adb shell pm list packages | tr -d '\r' | sed 's/^package://')
+# -e = nur AKTIVE Pakete. Deaktivierte (💤) zählen als erledigt.
+INSTALLIERT=$(adb shell pm list packages -e | tr -d '\r' | sed 's/^package://')
+DEAKTIVIERT=$(adb shell pm list packages -d | tr -d '\r' | sed 's/^package://')
+ist_deaktiviert() { grep -qx "$1" <<< "$DEAKTIVIERT"; }
+zaehl_deaktiviert() { local p n=0; for p in "$@"; do ist_deaktiviert "$p" && ((n++)); done; echo "$n"; }
 ist_installiert() { grep -qx "$1" <<< "$INSTALLIERT"; }
 
 ist_bekannt() {   # steht auf irgendeiner Liste (entfernen oder geschützt)?
@@ -288,6 +294,8 @@ else
   zeile "  ${GELB}⚠️  $(tf entfernt_von "$X_WEG" "${#X_LISTE[@]}"), $(t noch_da)${RESET}"
   for p in "${X_REST[@]}"; do zeile "     - $p"; done
 fi
+X_DEAKT=$(zaehl_deaktiviert "${X_LISTE[@]}")
+(( X_DEAKT > 0 )) && zeile "  ${BLAU}💤 $(tf davon_deakt "$X_DEAKT")${RESET}"
 X_SCHUTZ_DA=$(reste_von "${X_SCHUTZ[@]}" | grep -vE "$GOOGLE_MUSTER" | grep -c . || true)
 zeile "  ${BLAU}🛡️  $(tf geschuetzt_info "$X_SCHUTZ_DA")${RESET}"
 
@@ -304,13 +312,18 @@ else
   for p in "${G_REST[@]}"; do zeile "     - $p"; done
 fi
 
+G_DEAKT=$(zaehl_deaktiviert "${G_APPS[@]}")
+(( G_DEAKT > 0 )) && zeile "  ${BLAU}💤 $(tf davon_deakt "$G_DEAKT")${RESET}"
+
 # ---------------------------------------------------------------------------
 # 3) Google-Kern
 # ---------------------------------------------------------------------------
 abschnitt "$(t s_gkern)"
 K_WEG=0
 for p in "${G_KERN[@]}"; do
-  if ist_installiert "$p"; then
+  if ist_deaktiviert "$p"; then
+    zeile "  ${BLAU}💤 $(printf '%-36s' "$p") $(t kern_weg) (💤)${RESET}"; ((K_WEG++))
+  elif ist_installiert "$p"; then
     zeile "  ${GELB}⚠️  $(printf '%-36s' "$p") $(t kern_da)${RESET}"
   else
     zeile "  ${GRUEN}✅ $(printf '%-36s' "$p") $(t kern_weg)${RESET}"; ((K_WEG++))

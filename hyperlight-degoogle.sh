@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  HyperLight Degoogle – hyperlight-degoogle.sh  –  Version 1.1
+#  HyperLight Degoogle – hyperlight-degoogle.sh  –  Version 1.2
 #  https://github.com/retoro753/HyperLight
 #
 #  Entfernt Google-Apps und (optional) die Google-Dienste vom
@@ -21,7 +21,7 @@
 #  Hilfe / Help:  ./hyperlight-degoogle.sh --help
 # =============================================================================
 
-VERSION="1.1"
+VERSION="1.2"
 set -u
 
 # ---------------------------------------------------------------------------
@@ -216,8 +216,8 @@ DE[b_ersatz]="kein Ersatz gesetzt, übersprungen"
 EN[b_ersatz]="no replacement set, skipped"
 DE[b_gescannt]="Gescannt"
 EN[b_gescannt]="Scanned"
-DE[b_legende]="Legende: ✅ entfernt · ❌ Fehler · ➖ nicht auf dem Gerät · 🛡️ geschützt · ⚠️ Ersatz fehlt"
-EN[b_legende]="Legend: ✅ removed · ❌ error · ➖ not on device · 🛡️ protected · ⚠️ replacement missing"
+DE[b_legende]="Legende: ✅ entfernt · 💤 deaktiviert · ❌ Fehler · ➖ nicht auf dem Gerät · 🛡️ geschützt · ⚠️ Ersatz fehlt"
+EN[b_legende]="Legend: ✅ removed · 💤 disabled · ❌ error · ➖ not on device · 🛡️ protected · ⚠️ replacement missing"
 DE[ersatz_tipp]="⚠️ = erst eine Ersatz-App installieren und als Standard setzen, dann Skript erneut starten."
 EN[ersatz_tipp]="⚠️ = install a replacement app and set it as default first, then run the script again."
 DE[pfad_bericht]="Bericht (Markdown):     %s"
@@ -226,6 +226,14 @@ DE[pfad_restore]="Rückgängig:             %s --restore"
 EN[pfad_restore]="Undo:                   %s --restore"
 DE[neustart]="Jetzt neu starten und testen: Anrufe, SMS, Tastatur, WLAN, Kamera."
 EN[neustart]="Now reboot and test: calls, SMS, keyboard, Wi-Fi, camera."
+DE[plan_b]="Entfernen blockiert – deaktiviere stattdessen"
+EN[plan_b]="Removal blocked – disabling instead"
+DE[schon_deaktiviert]="ist bereits deaktiviert"
+EN[schon_deaktiviert]="is already disabled"
+DE[b_deaktiviert]="Entfernen blockiert (%s) → deaktiviert"
+EN[b_deaktiviert]="removal blocked (%s) → disabled"
+DE[b_schon_deaktiviert]="bereits deaktiviert"
+EN[b_schon_deaktiviert]="already disabled"
 DE[unbekannt]="Unbekannte Option: %s (Hilfe: --help)"
 EN[unbekannt]="Unknown option: %s (help: --help)"
 
@@ -247,6 +255,7 @@ Usage: ./hyperlight-degoogle.sh [option] [--lang de|en]
   --lang de|en   choose language without being asked
   --help         show this help
 
+If removal is blocked, the app is disabled instead (💤); --restore re-enables it.
 Phone, SMS, contacts, keyboard and Chrome are only removed if another app
 is already set as default. Stage 2 is blocked while a Google account is
 signed in on the phone (anti-theft lock after factory reset!).
@@ -265,6 +274,8 @@ Nutzung: ./hyperlight-degoogle.sh [Option] [--lang de|en]
   --lang de|en   Sprache wählen, ohne gefragt zu werden
   --help         diese Hilfe
 
+Ist das Entfernen blockiert, wird die App stattdessen deaktiviert (💤);
+--restore aktiviert sie wieder.
 Telefon, SMS, Kontakte, Tastatur und Chrome werden nur entfernt, wenn schon
 eine andere App als Standard gesetzt ist. Stufe 2 ist gesperrt, solange ein
 Google-Konto auf dem Handy angemeldet ist (Diebstahlsperre nach Werksreset!).
@@ -371,30 +382,50 @@ if [[ "$CODENAME" != ${ERWARTETER_CODENAME}* ]]; then echo "${GELB}$(t falsches_
 # 9) Wiederherstellen (eigene Logs: degoogle-entfernt-*.txt)
 # ---------------------------------------------------------------------------
 if [[ "$MODUS" == restore* ]]; then
+  # degoogle-entfernt-ZEIT.txt    -> install-existing
+  # degoogle-deaktiviert-ZEIT.txt -> pm enable
+  ENTF=""; DEAK=""
   if [[ "$MODUS" == "restore" ]]; then
-    DATEIEN=$(ls -1t "$LOG_ORDNER"/degoogle-entfernt-*.txt 2>/dev/null | head -n 1)
-  else
-    DATEIEN=$(ls -1 "$LOG_ORDNER"/degoogle-entfernt-*.txt 2>/dev/null)
-  fi
-  if [[ -z "$DATEIEN" ]]; then t kein_log; echo; exit 1; fi
-  # Kern zuerst zurück (gms vor allem anderen), dann die Apps
-  # shellcheck disable=SC2086
-  ALLE=$(sort -u $DATEIEN)
-  for PAKET in com.google.android.gms com.google.android.gsf com.android.vending; do
-    if grep -qx "$PAKET" <<< "$ALLE"; then
-      echo "  $PAKET -> $(adb shell cmd package install-existing "$PAKET" 2>&1 | tr -d '\r')"
+    NEUESTE=$(ls -1t "$LOG_ORDNER"/degoogle-entfernt-*.txt "$LOG_ORDNER"/degoogle-deaktiviert-*.txt 2>/dev/null | head -n 1)
+    if [[ -n "$NEUESTE" ]]; then
+      TS=$(basename "$NEUESTE" .txt); TS="${TS#degoogle-entfernt-}"; TS="${TS#degoogle-deaktiviert-}"
+      ENTF=$(ls -1 "$LOG_ORDNER"/degoogle-entfernt-"$TS".txt 2>/dev/null)
+      DEAK=$(ls -1 "$LOG_ORDNER"/degoogle-deaktiviert-"$TS".txt 2>/dev/null)
     fi
+  else
+    ENTF=$(ls -1 "$LOG_ORDNER"/degoogle-entfernt-*.txt 2>/dev/null)
+    DEAK=$(ls -1 "$LOG_ORDNER"/degoogle-deaktiviert-*.txt 2>/dev/null)
+  fi
+  if [[ -z "$ENTF" && -z "$DEAK" ]]; then t kein_log; echo; exit 1; fi
+
+  # Zurückholen: entfernt -> install-existing, deaktiviert -> enable
+  zurueck() {
+    if grep -qx "$1" <<< "$ALLE_E"; then
+      echo "  $1 -> $(adb shell cmd package install-existing "$1" 2>&1 | tr -d '\r')"
+    fi
+    if grep -qx "$1" <<< "$ALLE_D"; then
+      echo "  $1 -> $(adb shell pm enable "$1" 2>&1 | tr -d '\r')"
+    fi
+  }
+  # shellcheck disable=SC2086
+  ALLE_E=$( [[ -n "$ENTF" ]] && sort -u $ENTF )
+  # shellcheck disable=SC2086
+  ALLE_D=$( [[ -n "$DEAK" ]] && sort -u $DEAK )
+  # Kern zuerst zurück (gms vor allem anderen), dann die Apps
+  for PAKET in com.google.android.gms com.google.android.gsf com.android.vending; do
+    zurueck "$PAKET"
   done
   while read -r PAKET; do
     [[ -z "$PAKET" ]] && continue
     [[ "$PAKET" =~ ^(com\.google\.android\.gms|com\.google\.android\.gsf|com\.android\.vending)$ ]] && continue
-    echo "  $PAKET -> $(adb shell cmd package install-existing "$PAKET" 2>&1 | tr -d '\r')"
-  done <<< "$ALLE"
+    zurueck "$PAKET"
+  done < <(printf '%s\n%s\n' "$ALLE_E" "$ALLE_D" | sort -u)
   echo "${GRUEN}$(t restore_fertig)${RESET}"
   exit 0
 fi
 
 INSTALLIERT=$(adb shell pm list packages | tr -d '\r' | sed 's/^package://')
+DEAKTIVIERT=$(adb shell pm list packages -d | tr -d '\r' | sed 's/^package://')
 
 # ---------------------------------------------------------------------------
 # 10) Scan
@@ -442,6 +473,8 @@ for PAKET in "${PAKETE[@]}"; do
     echo "  ${BLAU}🛡️  $PAKET $(t ist_geschuetzt)${RESET}"; STATUS[$PAKET]="geschuetzt"
   elif ! grep -qx "$PAKET" <<< "$INSTALLIERT"; then
     echo "    ($(t nicht_vorhanden): $PAKET)"; STATUS[$PAKET]="nicht_vorhanden"
+  elif grep -qx "$PAKET" <<< "$DEAKTIVIERT"; then
+    echo "  ${BLAU}💤 $PAKET $(t schon_deaktiviert)${RESET}"; STATUS[$PAKET]="schon_deaktiviert"
   elif ! ersatz_ok "$PAKET"; then
     echo "  ${GELB}⚠️  $PAKET – $(t kein_ersatz)${RESET}"; STATUS[$PAKET]="kein_ersatz"
   else
@@ -473,15 +506,24 @@ fi
 mkdir -p "$LOG_ORDNER"
 ZEITSTEMPEL=$(date +%Y-%m-%d_%H-%M-%S)
 LOG="$LOG_ORDNER/degoogle-entfernt-$ZEITSTEMPEL.txt"
-ERFOLG=0; FEHLER=0
+DLOG="$LOG_ORDNER/degoogle-deaktiviert-$ZEITSTEMPEL.txt"
+ERFOLG=0; FEHLER=0; DEAKT=0
 for PAKET in "${ZU_ENTFERNEN[@]}"; do
   ERGEBNIS=$(adb shell pm uninstall --user 0 "$PAKET" 2>&1 | tr -d '\r')
   if [[ "$ERGEBNIS" == *Success* ]]; then
     echo "  ${GRUEN}✔ $PAKET${RESET}"; echo "$PAKET" >> "$LOG"
     STATUS[$PAKET]="entfernt"; ((ERFOLG++))
   else
-    echo "  ${ROT}✘ $PAKET -> $ERGEBNIS${RESET}"
-    STATUS[$PAKET]="fehler"; MELDUNG[$PAKET]="$ERGEBNIS"; ((FEHLER++))
+    # Plan B: Entfernen blockiert -> stattdessen deaktivieren
+    echo "  ${GELB}↪ $PAKET: $ERGEBNIS – $(t plan_b)${RESET}"
+    D_ERG=$(adb shell pm disable-user --user 0 "$PAKET" 2>&1 | tr -d '\r')
+    if [[ "$D_ERG" == *disabled* ]]; then
+      echo "  ${BLAU}💤 $PAKET${RESET}"; echo "$PAKET" >> "$DLOG"
+      STATUS[$PAKET]="deaktiviert"; MELDUNG[$PAKET]="$ERGEBNIS"; ((DEAKT++))
+    else
+      echo "  ${ROT}✘ $PAKET -> $ERGEBNIS / $D_ERG${RESET}"
+      STATUS[$PAKET]="fehler"; MELDUNG[$PAKET]="$ERGEBNIS / $D_ERG"; ((FEHLER++))
+    fi
   fi
 done
 
@@ -494,12 +536,14 @@ for PAKET in "${PAKETE[@]}"; do
     nicht_vorhanden) ((NICHT_DA++)) ;;
     geschuetzt)      ((GESCH++)) ;;
     kein_ersatz)     ((ERSATZ++)) ;;
+    schon_deaktiviert) ((DEAKT++)) ;;
   esac
 done
 
 symbol() {
   case "${STATUS[$1]}" in
     entfernt) echo "✅" ;; fehler) echo "❌" ;; nicht_vorhanden) echo "➖" ;;
+    deaktiviert|schon_deaktiviert) echo "💤" ;;
     geschuetzt) echo "🛡️" ;; kein_ersatz) echo "⚠️" ;;
   esac
 }
@@ -515,6 +559,8 @@ BERICHT="$LOG_ORDNER/degoogle-bericht-$ZEITSTEMPEL.md"
   for PAKET in "${PAKETE[@]}"; do
     case "${STATUS[$PAKET]}" in
       entfernt)        H="$(t b_entfernt)" ;;
+      deaktiviert)     H="$(tf b_deaktiviert "${MELDUNG[$PAKET]}")" ;;
+      schon_deaktiviert) H="$(t b_schon_deaktiviert)" ;;
       fehler)          H="${MELDUNG[$PAKET]}" ;;
       nicht_vorhanden) H="$(t b_nicht_da)" ;;
       geschuetzt)      H="$(t b_geschuetzt)" ;;
@@ -523,7 +569,7 @@ BERICHT="$LOG_ORDNER/degoogle-bericht-$ZEITSTEMPEL.md"
     echo "| $(symbol "$PAKET") | \`$PAKET\` | $H |"
   done
   echo
-  echo "**$(t b_gescannt):** ${#PAKETE[@]} · ✅ $ERFOLG · ❌ $FEHLER · ➖ $NICHT_DA · 🛡️ $GESCH · ⚠️ $ERSATZ"
+  echo "**$(t b_gescannt):** ${#PAKETE[@]} · ✅ $ERFOLG · 💤 $DEAKT · ❌ $FEHLER · ➖ $NICHT_DA · 🛡️ $GESCH · ⚠️ $ERSATZ"
   echo
   t b_legende; echo
 } > "$BERICHT"
@@ -538,7 +584,7 @@ for PAKET in "${PAKETE[@]}"; do
   fi
 done
 echo "----------------------------------------------------------"
-echo "  $(t b_gescannt): ${#PAKETE[@]}  ✅ $ERFOLG  ❌ $FEHLER  ➖ $NICHT_DA  🛡️ $GESCH  ⚠️ $ERSATZ"
+echo "  $(t b_gescannt): ${#PAKETE[@]}  ✅ $ERFOLG  💤 $DEAKT  ❌ $FEHLER  ➖ $NICHT_DA  🛡️ $GESCH  ⚠️ $ERSATZ"
 echo "=========================================================="
 (( ERSATZ > 0 )) && { echo; echo "${GELB}$(t ersatz_tipp)${RESET}"; }
 echo

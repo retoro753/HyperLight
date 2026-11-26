@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  HyperLight – hyperlight.sh  –  Version 2.1
+#  HyperLight – hyperlight.sh  –  Version 2.2
 #  https://github.com/retoro753/HyperLight
 #
 #  Entfernt Xiaomi-Bloatware vom Redmi Note 13 4G (NFC) per ADB – ohne Root.
@@ -16,7 +16,7 @@
 #  Hilfe / Help:  ./hyperlight.sh --help
 # =============================================================================
 
-VERSION="2.1"
+VERSION="2.2"
 
 set -u   # Abbruch bei nicht definierten Variablen (Schutz vor Tippfehlern)
 
@@ -209,8 +209,8 @@ DE[b_geschuetzt]="geschützt, übersprungen"
 EN[b_geschuetzt]="protected, skipped"
 DE[b_gescannt]="Gescannt"
 EN[b_gescannt]="Scanned"
-DE[b_legende]="Legende: ✅ entfernt · ❌ Fehler · ➖ nicht auf dem Gerät · 🛡️ geschützt"
-EN[b_legende]="Legend: ✅ removed · ❌ error · ➖ not on device · 🛡️ protected"
+DE[b_legende]="Legende: ✅ entfernt · 💤 deaktiviert · ❌ Fehler · ➖ nicht auf dem Gerät · 🛡️ geschützt"
+EN[b_legende]="Legend: ✅ removed · 💤 disabled · ❌ error · ➖ not on device · 🛡️ protected"
 DE[pfad_bericht]="Bericht (Markdown):     %s"
 EN[pfad_bericht]="Report (Markdown):      %s"
 DE[pfad_log]="Wiederherstellungs-Log: %s"
@@ -221,6 +221,16 @@ DE[pfad_scan]="Noch Xiaomi-Reste?      %s --scan"
 EN[pfad_scan]="Xiaomi leftovers?       %s --scan"
 DE[neustart]="Jetzt neu starten und testen: Anrufe, WLAN, Kamera, Benachrichtigungen."
 EN[neustart]="Now reboot and test: calls, Wi-Fi, camera, notifications."
+DE[plan_b]="Entfernen blockiert – deaktiviere stattdessen"
+EN[plan_b]="Removal blocked – disabling instead"
+DE[schon_deaktiviert]="ist bereits deaktiviert"
+EN[schon_deaktiviert]="is already disabled"
+DE[b_deaktiviert]="Entfernen blockiert (%s) → deaktiviert"
+EN[b_deaktiviert]="removal blocked (%s) → disabled"
+DE[b_schon_deaktiviert]="bereits deaktiviert"
+EN[b_schon_deaktiviert]="already disabled"
+DE[b_legende2]="💤 deaktiviert: App ist noch installiert, startet aber nicht mehr und ist unsichtbar."
+EN[b_legende2]="💤 disabled: app is still installed but no longer runs and is hidden."
 DE[unbekannt]="Unbekannte Option: %s (Hilfe: --help)"
 EN[unbekannt]="Unknown option: %s (help: --help)"
 
@@ -244,6 +254,8 @@ Usage: ./hyperlight.sh [option] [--lang de|en]
 
 Packages are removed with "pm uninstall --user 0": nothing is deleted
 permanently, everything can be restored and comes back after a factory reset.
+If Xiaomi blocks the removal (e.g. Failure [-1000]), the app is disabled
+instead ("pm disable-user"). --restore re-enables it.
 EOF
   else
     cat <<EOF
@@ -261,6 +273,8 @@ Nutzung: ./hyperlight.sh [Option] [--lang de|en]
 
 Pakete werden mit "pm uninstall --user 0" entfernt: Nichts wird endgültig
 gelöscht, alles lässt sich zurückholen und ist nach einem Werksreset wieder da.
+Blockiert Xiaomi das Entfernen (z. B. Failure [-1000]), wird die App
+stattdessen deaktiviert ("pm disable-user"). --restore aktiviert sie wieder.
 EOF
   fi
 }
@@ -360,19 +374,40 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "$MODUS" == restore* ]]; then
   # Sucht in neuem UND altem Log-Ordner (Kompatibilität mit v1.x/2.0)
+  # entfernt-ZEIT.txt   -> mit install-existing zurückholen
+  # deaktiviert-ZEIT.txt -> mit pm enable wieder aktivieren
   if [[ "$MODUS" == "restore" ]]; then
-    DATEIEN=$(ls -1t "$LOG_ORDNER"/entfernt-*.txt "$ALTER_LOG_ORDNER"/entfernt-*.txt 2>/dev/null | head -n 1)
+    # Neueste Log-Datei finden und ihren Zeitstempel nehmen
+    NEUESTE=$(ls -1t "$LOG_ORDNER"/entfernt-*.txt "$LOG_ORDNER"/deaktiviert-*.txt \
+                     "$ALTER_LOG_ORDNER"/entfernt-*.txt 2>/dev/null | head -n 1)
+    if [[ -n "$NEUESTE" ]]; then
+      TS=$(basename "$NEUESTE" .txt); TS="${TS#entfernt-}"; TS="${TS#deaktiviert-}"
+      ENTF=$(ls -1 "$(dirname "$NEUESTE")"/entfernt-"$TS".txt 2>/dev/null)
+      DEAK=$(ls -1 "$(dirname "$NEUESTE")"/deaktiviert-"$TS".txt 2>/dev/null)
+    fi
   else
-    DATEIEN=$(ls -1 "$LOG_ORDNER"/entfernt-*.txt "$ALTER_LOG_ORDNER"/entfernt-*.txt 2>/dev/null)
+    ENTF=$(ls -1 "$LOG_ORDNER"/entfernt-*.txt "$ALTER_LOG_ORDNER"/entfernt-*.txt 2>/dev/null)
+    DEAK=$(ls -1 "$LOG_ORDNER"/deaktiviert-*.txt 2>/dev/null)
   fi
-  if [[ -z "$DATEIEN" ]]; then t kein_log; echo; exit 1; fi
+  ENTF="${ENTF:-}"; DEAK="${DEAK:-}"
+  if [[ -z "$ENTF" && -z "$DEAK" ]]; then t kein_log; echo; exit 1; fi
   # sort -u = jedes Paket nur einmal / each package only once
-  # shellcheck disable=SC2086
-  sort -u $DATEIEN | while read -r PAKET; do
-    [[ -z "$PAKET" ]] && continue
-    ERGEBNIS=$(adb shell cmd package install-existing "$PAKET" 2>&1 | tr -d '\r')
-    echo "  $PAKET -> $ERGEBNIS"
-  done
+  if [[ -n "$ENTF" ]]; then
+    # shellcheck disable=SC2086
+    sort -u $ENTF | while read -r PAKET; do
+      [[ -z "$PAKET" ]] && continue
+      ERGEBNIS=$(adb shell cmd package install-existing "$PAKET" 2>&1 | tr -d '\r')
+      echo "  $PAKET -> $ERGEBNIS"
+    done
+  fi
+  if [[ -n "$DEAK" ]]; then
+    # shellcheck disable=SC2086
+    sort -u $DEAK | while read -r PAKET; do
+      [[ -z "$PAKET" ]] && continue
+      ERGEBNIS=$(adb shell pm enable "$PAKET" 2>&1 | tr -d '\r')
+      echo "  $PAKET -> $ERGEBNIS"
+    done
+  fi
   echo "${GRUEN}$(t restore_fertig)${RESET}"
   exit 0
 fi
@@ -381,6 +416,8 @@ fi
 # 10) Installierte Pakete holen / Get installed packages
 # ---------------------------------------------------------------------------
 INSTALLIERT=$(adb shell pm list packages | tr -d '\r' | sed 's/^package://')
+# -d = nur deaktivierte Pakete / disabled packages only
+DEAKTIVIERT=$(adb shell pm list packages -d | tr -d '\r' | sed 's/^package://')
 
 # ---------------------------------------------------------------------------
 # 11) Scan
@@ -416,6 +453,9 @@ for PAKET in "${PAKETE[@]}"; do
   if ist_geschuetzt "$PAKET"; then
     echo "  ${BLAU}🛡️  $PAKET $(t ist_geschuetzt)${RESET}"
     STATUS[$PAKET]="geschuetzt"
+  elif grep -qx "$PAKET" <<< "$DEAKTIVIERT"; then
+    echo "  ${BLAU}💤 $PAKET $(t schon_deaktiviert)${RESET}"
+    STATUS[$PAKET]="schon_deaktiviert"
   elif grep -qx "$PAKET" <<< "$INSTALLIERT"; then
     echo "  ${GELB}- $PAKET${RESET}"
     ZU_ENTFERNEN+=("$PAKET")
@@ -450,7 +490,8 @@ esac
 mkdir -p "$LOG_ORDNER"
 ZEITSTEMPEL=$(date +%Y-%m-%d_%H-%M-%S)
 LOG="$LOG_ORDNER/entfernt-$ZEITSTEMPEL.txt"
-ERFOLG=0; FEHLER=0
+DLOG="$LOG_ORDNER/deaktiviert-$ZEITSTEMPEL.txt"
+ERFOLG=0; FEHLER=0; DEAKT=0
 
 for PAKET in "${ZU_ENTFERNEN[@]}"; do
   ERGEBNIS=$(adb shell pm uninstall --user 0 "$PAKET" 2>&1 | tr -d '\r')
@@ -460,10 +501,22 @@ for PAKET in "${ZU_ENTFERNEN[@]}"; do
     STATUS[$PAKET]="entfernt"
     ((ERFOLG++))
   else
-    echo "  ${ROT}✘ $PAKET -> $ERGEBNIS${RESET}"
-    STATUS[$PAKET]="fehler"
-    MELDUNG[$PAKET]="$ERGEBNIS"
-    ((FEHLER++))
+    # Plan B: Xiaomi blockiert das Entfernen (z. B. Failure [-1000])
+    #         -> App stattdessen deaktivieren
+    echo "  ${GELB}↪ $PAKET: $ERGEBNIS – $(t plan_b)${RESET}"
+    D_ERG=$(adb shell pm disable-user --user 0 "$PAKET" 2>&1 | tr -d '\r')
+    if [[ "$D_ERG" == *disabled* ]]; then
+      echo "  ${BLAU}💤 $PAKET${RESET}"
+      echo "$PAKET" >> "$DLOG"
+      STATUS[$PAKET]="deaktiviert"
+      MELDUNG[$PAKET]="$ERGEBNIS"
+      ((DEAKT++))
+    else
+      echo "  ${ROT}✘ $PAKET -> $ERGEBNIS / $D_ERG${RESET}"
+      STATUS[$PAKET]="fehler"
+      MELDUNG[$PAKET]="$ERGEBNIS / $D_ERG"
+      ((FEHLER++))
+    fi
   fi
 done
 
@@ -474,6 +527,7 @@ NICHT_DA=0; GESCHUETZT_ANZ=0
 for PAKET in "${PAKETE[@]}"; do
   [[ "${STATUS[$PAKET]}" == "nicht_vorhanden" ]] && ((NICHT_DA++))
   [[ "${STATUS[$PAKET]}" == "geschuetzt" ]] && ((GESCHUETZT_ANZ++))
+  [[ "${STATUS[$PAKET]}" == "schon_deaktiviert" ]] && ((DEAKT++))
 done
 
 BERICHT="$LOG_ORDNER/bericht-$ZEITSTEMPEL.md"
@@ -487,15 +541,19 @@ BERICHT="$LOG_ORDNER/bericht-$ZEITSTEMPEL.md"
   for PAKET in "${PAKETE[@]}"; do
     case "${STATUS[$PAKET]}" in
       entfernt)        echo "| ✅ | \`$PAKET\` | $(t b_entfernt) |" ;;
+      deaktiviert)     echo "| 💤 | \`$PAKET\` | $(tf b_deaktiviert "${MELDUNG[$PAKET]}") |" ;;
+      schon_deaktiviert) echo "| 💤 | \`$PAKET\` | $(t b_schon_deaktiviert) |" ;;
       fehler)          echo "| ❌ | \`$PAKET\` | ${MELDUNG[$PAKET]} |" ;;
       nicht_vorhanden) echo "| ➖ | \`$PAKET\` | $(t b_nicht_da) |" ;;
       geschuetzt)      echo "| 🛡️ | \`$PAKET\` | $(t b_geschuetzt) |" ;;
     esac
   done
   echo
-  echo "**$(t b_gescannt):** ${#PAKETE[@]} · ✅ $ERFOLG · ❌ $FEHLER · ➖ $NICHT_DA · 🛡️ $GESCHUETZT_ANZ"
+  echo "**$(t b_gescannt):** ${#PAKETE[@]} · ✅ $ERFOLG · 💤 $DEAKT · ❌ $FEHLER · ➖ $NICHT_DA · 🛡️ $GESCHUETZT_ANZ"
   echo
   t b_legende; echo
+  echo
+  t b_legende2; echo
 } > "$BERICHT"
 
 echo
@@ -503,13 +561,14 @@ echo "==================== $(t bericht_titel) ===================="
 for PAKET in "${PAKETE[@]}"; do
   case "${STATUS[$PAKET]}" in
     entfernt)        printf "  %-36s ✅\n" "$PAKET" ;;
+    deaktiviert|schon_deaktiviert) printf "  %-36s 💤\n" "$PAKET" ;;
     fehler)          printf "  %-36s ❌  (%s)\n" "$PAKET" "${MELDUNG[$PAKET]}" ;;
     nicht_vorhanden) printf "  %-36s ➖\n" "$PAKET" ;;
     geschuetzt)      printf "  %-36s 🛡️\n" "$PAKET" ;;
   esac
 done
 echo "------------------------------------------------------"
-echo "  $(t b_gescannt): ${#PAKETE[@]}  ✅ $ERFOLG  ❌ $FEHLER  ➖ $NICHT_DA  🛡️ $GESCHUETZT_ANZ"
+echo "  $(t b_gescannt): ${#PAKETE[@]}  ✅ $ERFOLG  💤 $DEAKT  ❌ $FEHLER  ➖ $NICHT_DA  🛡️ $GESCHUETZT_ANZ"
 echo "======================================================"
 echo
 tf pfad_bericht "$BERICHT"; echo

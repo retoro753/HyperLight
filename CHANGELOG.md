@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-26 – Plan B: Deaktivieren 💤
+### hyperlight.sh [2.2] · hyperlight-degoogle.sh [1.2]
+- Blockiert Xiaomi das Entfernen (z. B. `Failure [-1000]`), wird die App automatisch mit `pm disable-user` deaktiviert
+- Bereits deaktivierte Apps werden erkannt und übersprungen
+- Neues Symbol 💤 im Endbericht
+- Eigene Logs für deaktivierte Apps (`deaktiviert-*.txt` / `degoogle-deaktiviert-*.txt`)
+- `--restore` / `--restore-all` aktivieren deaktivierte Apps wieder (`pm enable`)
+### hyperlight-check.sh [1.1]
+- Deaktivierte Apps zählen als erledigt und werden separat ausgewiesen
+
+---
+
 ## Check [1.0] – 2026-11-26
 ### Erste Version von `hyperlight-check.sh`
 - Nur-Lese-Audit: Xiaomi-Reste, Google-Apps, Google-Kern, unbekannte Pakete

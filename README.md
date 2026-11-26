@@ -43,6 +43,7 @@ adb shell getprop ro.product.device
 - **Probelauf** (`--dry-run`): zeigt, was passieren würde, ohne etwas zu ändern
 - **Sicherheitsabfrage** vor jeder Änderung
 - **Endbericht** im Terminal und als Markdown-Datei
+- **💤 Plan B – Deaktivieren:** Blockiert Xiaomi das Entfernen (z. B. `Failure [-1000]`), wird die App automatisch **deaktiviert** statt entfernt. Sie bleibt installiert, startet aber nicht mehr und ist unsichtbar. `--restore` aktiviert sie wieder
 - **🔍 Scan** (`--scan`): findet Pakete, die auf keiner Liste stehen
 - **Wiederherstellung** (`--restore`, `--restore-all`)
 - **Zweisprachig:** Deutsch oder Englisch, Auswahl beim Start oder per `--lang de|en`
@@ -53,7 +54,7 @@ adb shell getprop ro.product.device
 
 - **Entfernt 54 Pakete:** Xiaomi-Werbedienst (MSA), Analytics, GetApps, Mi Store, Mi Browser, Cloud-Dienste, ShareMe und vorinstallierte Drittanbieter-Apps (Amazon, LinkedIn, Bing, Facebook, Netflix …)
 - **Geschützt:** Launcher, Berechtigungen, Akku-Verwaltung, Kamera, Galerie, Google-Play-Dienste …
-- **Endbericht:** ✅ entfernt · ❌ Fehler · ➖ nicht vorhanden · 🛡️ geschützt
+- **Endbericht:** ✅ entfernt · 💤 deaktiviert · ❌ Fehler · ➖ nicht vorhanden · 🛡️ geschützt
 
 ---
 
@@ -103,7 +104,7 @@ Ein **Audit**, das prüft, wie weit dein Handy von Xiaomi und Google befreit ist
 
 | # | Bereich | Prüfung |
 |---|---|---|
-| 1 | Xiaomi-Bloatware | Welche bekannten Pakete sind noch installiert? |
+| 1 | Xiaomi-Bloatware | Welche bekannten Pakete sind noch aktiv? (Deaktivierte 💤 zählen als erledigt) |
 | 2 | Google-Apps | Stand von Degoogle Stufe 1 |
 | 3 | Google-Kern | Play-Dienste, Play Store, GSF, Google-Backup |
 | 4 | Unbekannte Reste | Xiaomi-/Google-Pakete, die auf keiner Liste stehen |
@@ -250,10 +251,10 @@ Logs und Berichte werden in `~/hyperlight-logs/` gespeichert.
 
 ## ↩️ Rückgängig machen
 
-Beide Skripte nutzen `pm uninstall --user 0`. Damit werden Apps **nur für den aktuellen Benutzer** entfernt, die Dateien bleiben im System. Darum gibt es drei Wege zurück:
+Beide Skripte nutzen `pm uninstall --user 0`. Damit werden Apps **nur für den aktuellen Benutzer** entfernt, die Dateien bleiben im System. Deaktivierte Apps (💤) werden mit `pm disable-user` stillgelegt. Darum gibt es drei Wege zurück:
 
-1. `./hyperlight.sh --restore` bzw. `./hyperlight-degoogle.sh --restore` (oder `--restore-all`)
-2. Einzelnes Paket: `adb shell cmd package install-existing PAKETNAME`
+1. `./hyperlight.sh --restore` bzw. `./hyperlight-degoogle.sh --restore` (oder `--restore-all`). Entfernte Apps werden zurückgeholt, deaktivierte wieder aktiviert
+2. Einzelnes Paket: `adb shell cmd package install-existing PAKETNAME` (entfernt) bzw. `adb shell pm enable PAKETNAME` (deaktiviert)
 3. **Werksreset**: Danach ist alles wieder da
 
 ---
@@ -268,6 +269,9 @@ Ja. Große HyperOS-Updates können einzelne Apps aber zurückbringen. Lass die S
 
 **Funktioniert es auf anderen Xiaomi/Redmi/POCO-Geräten?**
 Nicht getestet. Die Skripte brechen bei anderen Codenamen ab. Wer es auf einem anderen Gerät testen will, kann `ERWARTETER_CODENAME` anpassen, aber **nur mit `--dry-run` anfangen** und auf eigene Gefahr.
+
+**Was bedeutet `Failure [-1000]`?**
+Ein Xiaomi-eigener Fehlercode: HyperOS blockiert bei manchen seiner Apps (z. B. Scanner, Kompass, Taschenrechner) das Entfernen, selbst per ADB. Die Skripte deaktivieren diese Apps dann automatisch (💤). Schlägt auch das fehl, hilft oft die Option **„USB-Debugging (Sicherheitseinstellungen)“** in den Entwickleroptionen (benötigt meist SIM-Karte und Xiaomi-Konto).
 
 **Werden Google-Apps entfernt?**
 Von `hyperlight.sh` nicht: Dort stehen Google-Play-Dienste und Play Store auf der Schutzliste. Dafür gibt es `hyperlight-degoogle.sh`.
@@ -314,7 +318,7 @@ chmod +x hyperlight.sh hyperlight-degoogle.sh hyperlight-check.sh
 ./hyperlight-check.sh --lang en              # final audit with high score
 ```
 
-**Features:** protected-package list (critical system apps are never touched), device check, dry run, confirmation prompt, final report (terminal + Markdown), `--scan` for unknown packages, restore options.
+**Features:** protected-package list (critical system apps are never touched), device check, dry run, confirmation prompt, final report (terminal + Markdown), `--scan` for unknown packages, restore options. If Xiaomi blocks removal (e.g. `Failure [-1000]`), the app is automatically **disabled** instead (💤, `pm disable-user`); `--restore` re-enables it.
 
 Both scripts ask for your language at startup (German or English), or use `--lang en`. Code comments are mostly German with English hints. Packages are removed with `pm uninstall --user 0` (user-level only, reversible, restored by a factory reset).
 
