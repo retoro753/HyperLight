@@ -1,0 +1,12 @@
+# Logs und Berichte des Skripts (enthalten Gerätedaten)
+hyperlight-logs/
+xiaomi-debloat-logs/
+entfernt-*.txt
+bericht-*.md
+
+# Editor- und Systemdateien
+*.swp
+*~
+.DS_Store
+.vscode/
+.idea/
